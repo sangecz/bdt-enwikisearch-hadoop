@@ -3,5 +3,6 @@ cz/cvut/bigdata/wordcount/WordCount$WordCountReducer.class
 cz/cvut/bigdata/wordcount/WordCount$WordCountMapper.class
 cz/cvut/bigdata/wordcount/WordCount.class
 cz/cvut/bigdata/cli/ConfiguredTool.class
+cz/cvut/bigdata/wordcount/StringLineWritable.class
 cz/cvut/bigdata/wordcount/WordCount$WordCountComparator.class
 cz/cvut/bigdata/wordcount/WordCount$WordLengthPartitioner.class

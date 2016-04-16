@@ -54,4 +54,9 @@ public class StringLineWritable implements WritableComparable<StringLineWritable
     public int hashCode() {
         return line != null ? line.hashCode() : 0;
     }
+
+    @Override
+    public String toString() {
+        return line;
+    }
 }

@@ -26,7 +26,6 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import cz.cvut.bigdata.cli.ArgumentParser;
-import org.apache.hadoop.fs.Path;
 
 /**
  * WordCount Example, version 1.0
@@ -75,11 +74,11 @@ public class WordCount extends Configured implements Tool
      *  00001          15 -- 29
      *  00003          30 -- OO
      */
-    public static class WordLengthPartitioner extends Partitioner<Text, IntWritable>
+    public static class WordLengthPartitioner extends Partitioner<Text, StringLineWritable>
     {
         private static final int MAXIMUM_LENGTH_SPAN = 30;
         
-        @Override public int getPartition(Text key, IntWritable value, int numOfPartitions)
+        @Override public int getPartition(Text key, StringLineWritable value, int numOfPartitions)
         {
             if (numOfPartitions == 1)
                 return 0;
@@ -95,11 +94,12 @@ public class WordCount extends Configured implements Tool
      * because we do not use it anyway, and emits (word, 1) for each occurrence of the word
      * in the line of text (i.e. the received value).
      */
-    public static class WordCountMapper extends Mapper<Object, Text, Text, IntWritable>
+    public static class WordCountMapper extends Mapper<Object, Text, Text, StringLineWritable>
     {
         private final IntWritable ONE = new IntWritable(1);
         private StringLineWritable line = new StringLineWritable();
         private Text word = new Text();
+        private Text docId = new Text();
         // filter patterns
         private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
         private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
@@ -109,6 +109,7 @@ public class WordCount extends Configured implements Tool
         public static final String DOCUMENT_COUNT_HELPER = "aaamojesuperslovickocece";
         private HashSet<String> uniqueWords = new HashSet<>();
         private HashMap<String, Integer> wordIdVocab;
+        private HashMap<String, Integer> termsFrequencyPerDoc;
         private int N;
 
         protected void setup(Context context) throws IOException, InterruptedException {
@@ -143,7 +144,8 @@ public class WordCount extends Configured implements Tool
         {
             ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(" ")));
 
-            String docId = arrayList.get(0).replaceFirst(DOC_ID_PATTERN, "");
+            String docIdStr = arrayList.get(0).replaceFirst(DOC_ID_PATTERN, "");
+            termsFrequencyPerDoc = new HashMap<>();
 
             for (String term : arrayList) {
 
@@ -156,16 +158,40 @@ public class WordCount extends Configured implements Tool
                     if (uniqueWords.add(term)) { // add() == true, if set did not contains term
                         word.set(term);
                         // unique term_i vezmu pouze jednou pro dany document, pak v reduce bude indikovat pocet DF_i
-                        context.write(word, ONE);
+//                        context.write(word, ONE);
+
+                        // poprve viden term i, tf_i = 1
+                        termsFrequencyPerDoc.put(term, 1);
+                    } else {
+                        // jiz vlozeno
+                        if(termsFrequencyPerDoc.get(term) != null) {
+                            int tf = termsFrequencyPerDoc.get(term);
+                            termsFrequencyPerDoc.put(term, tf + 1);
+                        }
                     }
                 }
             }
 
-//            context.write(word, line);
+            ArrayList<String> vector = new ArrayList<>();
+            for(Map.Entry<String, Integer> entry : termsFrequencyPerDoc.entrySet()) {
+                String t_i = entry.getKey();
+                int tf_i = entry.getValue();
+                // get term's id
+                int id_i;
+                if(wordIdVocab.get(t_i) != null) {
+                    id_i = wordIdVocab.get(t_i);
+                    vector.add(id_i + ":" + tf_i);
+                }
+            }
+
+            line.set(vector.toString());
+            docId.set(docIdStr);
+            context.write(docId, line);
 
             // counts number of docs
             word.set(DOCUMENT_COUNT_HELPER);
-            context.write(word, ONE);
+
+//            context.write(word, ONE);
         }
     }
 
@@ -176,9 +202,9 @@ public class WordCount extends Configured implements Tool
      * 
      * NOTE: The received list may not contain only 1s if a combiner is used.
      */
-    public static class WordCountReducer extends Reducer<Text, IntWritable, Text, IntWritable>
+    public static class WordCountReducer extends Reducer<Text, StringLineWritable, Text, StringLineWritable>
     {
-        public void reduce(Text text, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException
+        public void reduce(Text text, Iterable<StringLineWritable> values, Context context) throws IOException, InterruptedException
         {
             /*
              TODO N
@@ -196,12 +222,11 @@ public class WordCount extends Configured implements Tool
 
             int sum = 0;
 
-            for (IntWritable value : values)
+            for (StringLineWritable value : values)
             {
-                sum += value.get();
+                context.write(text, value);
             }
 
-            context.write(text, new IntWritable(sum));
         }
     }
 
@@ -259,7 +284,8 @@ public class WordCount extends Configured implements Tool
 
         // Specify (key, value).
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
+        job.setOutputValueClass(StringLineWritable.class);
+//        job.setOutputValueClass(IntWritable.class);
 
         // Input.
         FileInputFormat.addInputPath(job, inputPath);
