@@ -1,6 +1,11 @@
 package cz.cvut.bigdata.wordcount;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.net.URI;
+import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -20,8 +25,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-
 import cz.cvut.bigdata.cli.ArgumentParser;
+import org.apache.hadoop.fs.Path;
 
 /**
  * WordCount Example, version 1.0
@@ -31,6 +36,8 @@ import cz.cvut.bigdata.cli.ArgumentParser;
  */
 public class WordCount extends Configured implements Tool
 {
+    private String VOCABULARY_PATH = "/bigdata/marekp11_task2.txt";
+
     /**
      * The main entry of the application.
      */
@@ -91,17 +98,74 @@ public class WordCount extends Configured implements Tool
     public static class WordCountMapper extends Mapper<Object, Text, Text, IntWritable>
     {
         private final IntWritable ONE = new IntWritable(1);
+        private StringLineWritable line = new StringLineWritable();
         private Text word = new Text();
+        // filter patterns
+        private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
+        private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
+        private static final String PATTERN_BAD_POSTFIX = "[^a-z]+$";
+        private String DOC_ID_PATTERN = "[^0-9]+$";
 
+        public static final String DOCUMENT_COUNT_HELPER = "aaamojesuperslovickocece";
+        private HashSet<String> uniqueWords = new HashSet<>();
+        private HashMap<String, Integer> wordIdVocab;
+        private int N;
+
+        protected void setup(Context context) throws IOException, InterruptedException {
+            wordIdVocab = new HashMap<>();
+
+            URI uri = context.getCacheFiles()[0];
+            BufferedReader bfr = new BufferedReader(new FileReader(new File(uri.getPath()).getName()));
+
+            // read number of documents: N
+            N = Integer.parseInt(bfr.readLine().split(" ")[1]);
+
+            // read vocabulary & store: word-wordId
+            String line;
+            int wordId = 0;
+            while ((line = bfr.readLine()) != null) {
+                String [] words = line.split("\t");
+                wordIdVocab.put(words[0].trim(), wordId++);
+            }
+
+            bfr.close();
+        }
+
+        /**
+         *
+         * @param key
+         * @param value radka textu
+         * @param context
+         * @throws IOException
+         * @throws InterruptedException
+         */
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
-            String[] words = value.toString().split(" ");
+            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(" ")));
 
-            for (String term : words)
-            {
-                word.set(term);
-                context.write(word, ONE);
+            String docId = arrayList.get(0).replaceFirst(DOC_ID_PATTERN, "");
+
+            for (String term : arrayList) {
+
+                // procisti slova se spatnym prefixem a/nebo postfixem + zahrne i prvni slova za docId,
+                // ktera jsou od id oddelena tabulatorem a vypadaji takto:  5345    prvniSlovo
+                term = term.replaceFirst(PATTERN_BAD_PREFIX, "").replaceFirst(PATTERN_BAD_POSTFIX, "");
+
+                if (term.matches(PATTERN_GOOD_WORDS)) {
+                    // DF_i .. document freq. = num. of documents containing term i
+                    if (uniqueWords.add(term)) { // add() == true, if set did not contains term
+                        word.set(term);
+                        // unique term_i vezmu pouze jednou pro dany document, pak v reduce bude indikovat pocet DF_i
+                        context.write(word, ONE);
+                    }
+                }
             }
+
+//            context.write(word, line);
+
+            // counts number of docs
+            word.set(DOCUMENT_COUNT_HELPER);
+            context.write(word, ONE);
         }
     }
 
@@ -116,6 +180,20 @@ public class WordCount extends Configured implements Tool
     {
         public void reduce(Text text, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException
         {
+            /*
+             TODO N
+             TODO Df
+             TODO vykopirovany slovnik: smazat nesmyslna slova a stopwords (seradit a podle Df odmazat)
+             TODO nakopirovat z5 do hdfs
+             TODO
+                puvodni wiki:  ID1 radek_clanku
+                               ID2 radek_clanku
+                vytvorit wiki: ID1 <ID_slova: TF>*
+                               ID2 <ID_slova: TF>*
+
+                job.addCacheFile(file) pro pouziti distribuovane cache na vsech nodech
+            */
+
             int sum = 0;
 
             for (IntWritable value : values)
@@ -156,6 +234,7 @@ public class WordCount extends Configured implements Tool
 
         // Create job.
         Job job = Job.getInstance(conf, "WordCount");
+        job.addCacheFile(new Path(VOCABULARY_PATH).toUri());
         job.setJarByClass(WordCountMapper.class);
 
         // Setup MapReduce.
