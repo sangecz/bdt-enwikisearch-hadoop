@@ -104,6 +104,7 @@ public class WordCount extends Configured implements Tool
         private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
         private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
         private static final String PATTERN_BAD_POSTFIX = "[^a-z]+$";
+        private static final String PATTERN_WHITESPACE = "\\s+";
         private String DOC_ID_PATTERN = "[^0-9]+$";
 
         public static final String DOCUMENT_COUNT_HELPER = "aaamojesuperslovickocece";
@@ -111,25 +112,31 @@ public class WordCount extends Configured implements Tool
         private HashMap<String, Integer> wordIdVocab;
         private HashMap<String, Integer> termsFrequencyPerDoc;
         private int N;
+        private double[] idfs;
 
         protected void setup(Context context) throws IOException, InterruptedException {
             wordIdVocab = new HashMap<>();
 
-            URI uri = context.getCacheFiles()[0];
-            BufferedReader bfr = new BufferedReader(new FileReader(new File(uri.getPath()).getName()));
-
-            // read number of documents: N
-            N = Integer.parseInt(bfr.readLine().split(" ")[1]);
-
-            // read vocabulary & store: word-wordId
-            String line;
-            int wordId = 0;
-            while ((line = bfr.readLine()) != null) {
-                String [] words = line.split("\t");
-                wordIdVocab.put(words[0].trim(), wordId++);
+            ArrayList<String> lines = Util.readLines(context.getCacheFiles()[0]);
+            if (lines.isEmpty()) {
+                return;
             }
 
-            bfr.close();
+            // read number of documents: N
+            String [] firstLine = lines.get(0).split(PATTERN_WHITESPACE);
+            if(firstLine[0].equals(DOCUMENT_COUNT_HELPER)) {
+                N = Integer.parseInt(firstLine[1]);
+            }
+
+            idfs = new double[lines.size()];
+
+            // skip first line ->> N
+            for (int row = 1; row < lines.size(); row++)  {
+                String[] words = lines.get(row).split(PATTERN_WHITESPACE);
+
+                wordIdVocab.put(words[0], row);
+                idfs[row] = Double.parseDouble(words[1]);
+            }
         }
 
         /**
@@ -157,9 +164,6 @@ public class WordCount extends Configured implements Tool
                     // DF_i .. document freq. = num. of documents containing term i
                     if (uniqueWords.add(term)) { // add() == true, if set did not contains term
                         word.set(term);
-                        // unique term_i vezmu pouze jednou pro dany document, pak v reduce bude indikovat pocet DF_i
-//                        context.write(word, ONE);
-
                         // poprve viden term i, tf_i = 1
                         termsFrequencyPerDoc.put(term, 1);
                     } else {
@@ -187,11 +191,6 @@ public class WordCount extends Configured implements Tool
             line.set(vector.toString());
             docId.set(docIdStr);
             context.write(docId, line);
-
-            // counts number of docs
-            word.set(DOCUMENT_COUNT_HELPER);
-
-//            context.write(word, ONE);
         }
     }
 
@@ -220,10 +219,7 @@ public class WordCount extends Configured implements Tool
                 job.addCacheFile(file) pro pouziti distribuovane cache na vsech nodech
             */
 
-            int sum = 0;
-
-            for (StringLineWritable value : values)
-            {
+            for (StringLineWritable value : values) {
                 context.write(text, value);
             }
 
