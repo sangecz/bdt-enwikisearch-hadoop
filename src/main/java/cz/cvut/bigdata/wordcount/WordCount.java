@@ -123,20 +123,21 @@ public class WordCount extends Configured implements Tool
             }
 
             // read number of documents: N
-            String [] firstLine = lines.get(0).split(PATTERN_WHITESPACE);
-            if(firstLine[0].equals(DOCUMENT_COUNT_HELPER)) {
-                N = Integer.parseInt(firstLine[1]);
-            }
+            String [] firstLine = lines.get(0).split(" ");
+            N = Integer.parseInt(firstLine[1]);
 
             idfs = new double[lines.size()];
 
             // skip first line ->> N
+            // radek: slovo  #vyskytu
             for (int row = 1; row < lines.size(); row++)  {
                 String[] words = lines.get(row).split(PATTERN_WHITESPACE);
 
                 wordIdVocab.put(words[0], row);
                 idfs[row] = Double.parseDouble(words[1]);
             }
+
+//            System.out.println("=== wordIdVocab.size=" + wordIdVocab.size() + ", N=" + N + ", idfs.len=" + idfs.length);
         }
 
         /**
@@ -188,9 +189,11 @@ public class WordCount extends Configured implements Tool
                 }
             }
 
-            line.set(vector.toString());
-            docId.set(docIdStr);
-            context.write(docId, line);
+            if (!vector.isEmpty()) {
+                line.set(vector.toString());
+                docId.set(docIdStr);
+                context.write(docId, line);
+            }
         }
     }
 
@@ -213,8 +216,9 @@ public class WordCount extends Configured implements Tool
              TODO
                 puvodni wiki:  ID1 radek_clanku
                                ID2 radek_clanku
-                vytvorit wiki: ID1 <ID_slova: TF>*
+                vytvorit wiki: ID1 <ID_slova: TF>*    ...mam
                                ID2 <ID_slova: TF>*
+                vytvorit wiki  ID_slova <DOC_ID: TF>*
 
                 job.addCacheFile(file) pro pouziti distribuovane cache na vsech nodech
             */
