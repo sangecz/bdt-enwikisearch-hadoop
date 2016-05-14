@@ -103,6 +103,7 @@ public class WordCount extends Configured implements Tool
         private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
         private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
         private static final String PATTERN_BAD_POSTFIX = "[^a-z]+$";
+        private static final String PATTERN_WITESPACE = "\\s+";
 
         public static final String DOCUMENT_COUNT_HELPER = "aaamojesuperslovickocece";
         private HashSet<String> uniqueWords = new HashSet<>();
@@ -117,7 +118,7 @@ public class WordCount extends Configured implements Tool
          */
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
-            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(" ")));
+            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(PATTERN_WITESPACE)));
 
             for (String term : arrayList) {
 
