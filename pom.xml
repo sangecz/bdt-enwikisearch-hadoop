@@ -1,20 +1,27 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>cz.cvut.bigdata</groupId>
-	<artifactId>WordCountExtended</artifactId>
+	<artifactId>HBaseBulkload</artifactId>
 	<version>1.0.0</version>
 	<packaging>jar</packaging>
-	<name>WordCountExtended</name>
+	<name>HBaseBulkload</name>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<jdk.version>1.8</jdk.version>
 		<hadoop.version>2.6.0</hadoop.version>
 		<cdh.version>cdh5.5.1</cdh.version>
+		<hbase.version>1.0.0-cdh5.5.1</hbase.version>
 	</properties>
 	<repositories>
 		<repository>
 			<id>cloudera</id>
-			<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+			<url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
 		</repository>
 	</repositories>
 	<build>
@@ -36,7 +43,7 @@
 				<configuration>
 					<archive>
 						<manifest>
-							<mainClass>cz.cvut.bigdata.wordcount.WordCount</mainClass>
+							<mainClass>cz.cvut.bigdata.wordcount.HBaseLoad</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
@@ -48,6 +55,12 @@
 			<groupId>org.apache.hadoop</groupId>
 			<artifactId>hadoop-client</artifactId>
 			<version>${hadoop.version}-${cdh.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.hbase</groupId>
+			<artifactId>hbase-server</artifactId>
+			<version>${hbase.version}</version>
 			<scope>provided</scope>
 		</dependency>
 	</dependencies>

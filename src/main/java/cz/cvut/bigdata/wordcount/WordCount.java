@@ -7,6 +7,16 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.RegionLocator;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
@@ -19,6 +29,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import cz.cvut.bigdata.cli.ArgumentParser;
@@ -31,7 +42,10 @@ import cz.cvut.bigdata.cli.ArgumentParser;
  */
 public class WordCount extends Configured implements Tool
 {
-    private String VOCABULARY_PATH = "/bigdata/marekp11_task2.txt";
+    private static final String INVERTED_INDEX_FILEPATH = "/bigdata/marekp11_task3.txt";
+    private static final String HBAFILE_OUTPUT_PATH = "/bigdata/marekp11_hbase";
+    private static final String TABLE_NAME = "marekp11:wiki_index";
+    private static String VOCABULARY_PATH = "/bigdata/marekp11_task2.txt";
 
     /**
      * The main entry of the application.
@@ -258,51 +272,76 @@ public class WordCount extends Configured implements Tool
         //
         // Configuration conf = new Configuration(true);
 
+        // HBASE
+        Configuration hconf = HBaseConfiguration.create();
+        hconf.set("hadoop.tmp.dir", "/tmp");
+        hconf.set("hadoop.security.authentication", "Kerberos");
+        UserGroupInformation.setConfiguration(hconf);
+        UserGroupInformation.getUGIFromTicketCache(System.getenv("KRB5CCNAME"), null);
+
+
+
         // Create job.
-        Job job = Job.getInstance(conf, "WordCount");
-        job.addCacheFile(new Path(VOCABULARY_PATH).toUri());
-        job.setJarByClass(WordCountMapper.class);
+        Job job = Job.getInstance(hconf, "WordCount");
+//        job.addCacheFile(new Path(VOCABULARY_PATH).toUri());
+        job.setJarByClass(HbaseMapper.class);
 
         // Setup MapReduce.
-        job.setMapperClass(WordCountMapper.class);
+        job.setMapperClass(HbaseMapper.class);
         job.setReducerClass(WordCountReducer.class);
 
-        // Make use of a combiner - in this simple case
-        // it is the same as the reducer.
-        job.setCombinerClass(WordCountReducer.class);
+        job.setMapOutputKeyClass(ImmutableBytesWritable.class);
+        job.setMapOutputValueClass(KeyValue.class);
 
-        // Sort the output words in reversed order.
-        job.setSortComparatorClass(WordCountComparator.class);
-        
-        // Use custom partitioner.
-        job.setPartitionerClass(WordLengthPartitioner.class);
+        FileInputFormat.addInputPath(job, new Path(INVERTED_INDEX_FILEPATH));
+        job.setInputFormatClass(StringLineWritable.class);
+        FileOutputFormat.setOutputPath(job, new Path(HBAFILE_OUTPUT_PATH));
 
-        // By default, the number of reducers is configured
-        // to be 1, similarly you can set up the number of
-        // reducers with the following line.
-        //
-        // job.setNumReduceTasks(1);
-
-        // Specify (key, value).
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(StringLineWritable.class);
-//        job.setOutputValueClass(IntWritable.class);
-
-        // Input.
-        FileInputFormat.addInputPath(job, inputPath);
-        job.setInputFormatClass(TextInputFormat.class);
-
-        // Output.
-        FileOutputFormat.setOutputPath(job, outputDir);
-        job.setOutputFormatClass(TextOutputFormat.class);
+        Connection connection = ConnectionFactory.createConnection(hconf);
+        TableName tableName = TableName.valueOf(TABLE_NAME);
+        Table hTable = connection.getTable(tableName);
+        RegionLocator regionLocator = connection.getRegionLocator(tableName);
+        HFileOutputFormat2.configureIncrementalLoad(job, hTable, regionLocator);
 
         FileSystem hdfs = FileSystem.get(conf);
 
         // Delete output directory (if exists).
-        if (hdfs.exists(outputDir))
-            hdfs.delete(outputDir, true);
+        if (hdfs.exists(new Path(HBAFILE_OUTPUT_PATH)))
+            hdfs.delete(new Path(HBAFILE_OUTPUT_PATH), true);
 
         // Execute the job.
         return job.waitForCompletion(true) ? 0 : 1;
+    }
+
+    private class HbaseMapper extends Mapper<Text, StringLineWritable, ImmutableBytesWritable, KeyValue> {
+
+        public void map(Text word, StringLineWritable docs_tfs, Context context) throws IOException, InterruptedException
+        {
+            // String word_id; String doc_id; int tf;
+
+            System.out.println("================XXX " + word.toString());
+
+            byte[] word_id_bytes = Bytes.toBytes(word.toString());
+            ImmutableBytesWritable HKey = new ImmutableBytesWritable(word_id_bytes);
+
+            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(docs_tfs.toString().toLowerCase().split(" ")));
+            System.out.println("================XXX " + arrayList);
+            for (String doc_tf : arrayList) {
+
+
+                String [] tmp = doc_tf.split(":");
+                String doc_id = tmp[0];
+                String tf = tmp[1];
+                byte[] doc_bytes = Bytes.toBytes(doc_id);
+                byte[] tf_bytes = Bytes.toBytes(tf);
+                byte[] col_family = Bytes.toBytes("doc");
+
+                KeyValue kv = new KeyValue(word_id_bytes, col_family, doc_bytes, tf_bytes);
+                context.write(HKey, kv);
+            }
+        }
+
+
+
     }
 }
