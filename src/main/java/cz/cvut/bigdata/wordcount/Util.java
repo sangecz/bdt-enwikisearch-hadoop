@@ -7,8 +7,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 
-import static cz.cvut.bigdata.wordcount.WordCount.WordCountMapper.DOCUMENT_COUNT_HELPER;
-
 /**
  * Created by sange on 20/04/16.
  */

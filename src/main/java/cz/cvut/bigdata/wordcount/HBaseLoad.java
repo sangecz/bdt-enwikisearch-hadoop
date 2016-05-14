@@ -26,21 +26,19 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Partitioner;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import cz.cvut.bigdata.cli.ArgumentParser;
 
 /**
- * WordCount Example, version 1.0
+ * HBaseLoad Example, version 1.0
  * 
- * This is a very simple extension of basic WordCount Example implemented using
+ * This is a very simple extension of basic HBaseLoad Example implemented using
  * a new MapReduce API.
  */
-public class WordCount extends Configured implements Tool
+public class HBaseLoad extends Configured implements Tool
 {
     private static final String INVERTED_INDEX_FILEPATH = "/bigdata/marekp11_task3.txt";
     private static final String HBAFILE_OUTPUT_PATH = "/bigdata/marekp11_hbase";
@@ -52,7 +50,7 @@ public class WordCount extends Configured implements Tool
      */
     public static void main(String[] arguments) throws Exception
     {
-        System.exit(ToolRunner.run(new WordCount(), arguments));
+        System.exit(ToolRunner.run(new HBaseLoad(), arguments));
     }
 
     /**
@@ -250,7 +248,7 @@ public class WordCount extends Configured implements Tool
      */
     @Override public int run(String[] arguments) throws Exception
     {
-        ArgumentParser parser = new ArgumentParser("WordCount");
+        ArgumentParser parser = new ArgumentParser("HBaseLoad");
 
         parser.addArgument("input", true, true, "specify input directory");
         parser.addArgument("output", true, true, "specify output directory");
@@ -282,7 +280,7 @@ public class WordCount extends Configured implements Tool
 
 
         // Create job.
-        Job job = Job.getInstance(hconf, "WordCount");
+        Job job = Job.getInstance(hconf, "HBaseLoad");
 //        job.addCacheFile(new Path(VOCABULARY_PATH).toUri());
         job.setJarByClass(HbaseMapper.class);
 
@@ -294,7 +292,7 @@ public class WordCount extends Configured implements Tool
         job.setMapOutputValueClass(KeyValue.class);
 
         FileInputFormat.addInputPath(job, new Path(INVERTED_INDEX_FILEPATH));
-        job.setInputFormatClass(StringLineWritable.class);
+        job.setInputFormatClass(MyInputFormat.class);
         FileOutputFormat.setOutputPath(job, new Path(HBAFILE_OUTPUT_PATH));
 
         Connection connection = ConnectionFactory.createConnection(hconf);
