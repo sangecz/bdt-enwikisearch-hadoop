@@ -1,10 +1,6 @@
 package cz.cvut.bigdata.wordcount;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
-import java.net.URI;
 import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
@@ -99,7 +95,7 @@ public class WordCount extends Configured implements Tool
         private final IntWritable ONE = new IntWritable(1);
         private StringLineWritable line = new StringLineWritable();
         private Text word = new Text();
-        private Text docId = new Text();
+        private Text WORD_id = new Text();
         // filter patterns
         private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
         private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
@@ -157,7 +153,7 @@ public class WordCount extends Configured implements Tool
 
             for (String term : arrayList) {
 
-                // procisti slova se spatnym prefixem a/nebo postfixem + zahrne i prvni slova za docId,
+                // procisti slova se spatnym prefixem a/nebo postfixem + zahrne i prvni slova za WORD_id,
                 // ktera jsou od id oddelena tabulatorem a vypadaji takto:  5345    prvniSlovo
                 term = term.replaceFirst(PATTERN_BAD_PREFIX, "").replaceFirst(PATTERN_BAD_POSTFIX, "");
 
@@ -177,22 +173,19 @@ public class WordCount extends Configured implements Tool
                 }
             }
 
-            ArrayList<String> vector = new ArrayList<>();
             for(Map.Entry<String, Integer> entry : termsFrequencyPerDoc.entrySet()) {
                 String t_i = entry.getKey();
                 int tf_i = entry.getValue();
                 // get term's id
-                int id_i;
+                int word_id;
+                // potoze ve slovniku nejsou vsechna slova
                 if(wordIdVocab.get(t_i) != null) {
-                    id_i = wordIdVocab.get(t_i);
-                    vector.add(id_i + ":" + tf_i);
-                }
-            }
+                    word_id = wordIdVocab.get(t_i);
 
-            if (!vector.isEmpty()) {
-                line.set(vector.toString());
-                docId.set(docIdStr);
-                context.write(docId, line);
+                    line.set(docIdStr + ":" + tf_i);
+                    WORD_id.set(word_id + "");
+                    context.write(WORD_id, line);
+                }
             }
         }
     }
@@ -214,19 +207,27 @@ public class WordCount extends Configured implements Tool
              TODO vykopirovany slovnik: smazat nesmyslna slova a stopwords (seradit a podle Df odmazat)
              TODO nakopirovat z5 do hdfs
              TODO
-                puvodni wiki:  ID1 radek_clanku
-                               ID2 radek_clanku
-                vytvorit wiki: ID1 <ID_slova: TF>*    ...mam
-                               ID2 <ID_slova: TF>*
-                vytvorit wiki  ID_slova <DOC_ID: TF>*
+                puvodni wiki:  DOC_ID1 radek_clanku
+                               DOC_ID2 radek_clanku
+                vytvorit wiki: DOC_ID1 <ID_slova: TF>*    ...mam
+                               DOC_ID2 <ID_slova: TF>*
+                vytvorit wiki  ID_slova <DOC_ID1:TF>*
 
                 job.addCacheFile(file) pro pouziti distribuovane cache na vsech nodech
             */
 
+            boolean first = true;
+            StringBuilder toReturn = new StringBuilder();
             for (StringLineWritable value : values) {
-                context.write(text, value);
+                if (!first)
+                    toReturn.append(", ");
+                first=false;
+                toReturn.append(value.toString());
             }
 
+            StringLineWritable slv = new StringLineWritable();
+            slv.set(toReturn.toString());
+            context.write(text, slv);
         }
     }
 
