@@ -21,11 +21,9 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Partitioner;
-import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Tool;
@@ -112,7 +110,7 @@ public class HBaseLoad extends Configured implements Tool
         private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
         private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
         private static final String PATTERN_BAD_POSTFIX = "[^a-z]+$";
-        private static final String PATTERN_WHITESPACE = "\\s+";
+        public static final String PATTERN_WHITESPACE = "\\s+";
         private String DOC_ID_PATTERN = "[^0-9]+$";
 
         public static final String DOCUMENT_COUNT_HELPER = "aaamojesuperslovickocece";
@@ -291,9 +289,9 @@ public class HBaseLoad extends Configured implements Tool
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         job.setMapOutputValueClass(KeyValue.class);
 
-        FileInputFormat.addInputPath(job, new Path(INVERTED_INDEX_FILEPATH));
-        job.setInputFormatClass(MyInputFormat.class);
-        FileOutputFormat.setOutputPath(job, new Path(HBAFILE_OUTPUT_PATH));
+        FileInputFormat.addInputPath(job, inputPath);
+        job.setInputFormatClass(TextInputFormat.class);
+        FileOutputFormat.setOutputPath(job, outputDir);
 
         Connection connection = ConnectionFactory.createConnection(hconf);
         TableName tableName = TableName.valueOf(TABLE_NAME);
@@ -304,32 +302,42 @@ public class HBaseLoad extends Configured implements Tool
         FileSystem hdfs = FileSystem.get(conf);
 
         // Delete output directory (if exists).
-        if (hdfs.exists(new Path(HBAFILE_OUTPUT_PATH)))
-            hdfs.delete(new Path(HBAFILE_OUTPUT_PATH), true);
+        if (hdfs.exists(outputDir))
+            hdfs.delete(outputDir, true);
 
         // Execute the job.
         return job.waitForCompletion(true) ? 0 : 1;
     }
 
-    private class HbaseMapper extends Mapper<Text, StringLineWritable, ImmutableBytesWritable, KeyValue> {
+    public static class HbaseMapper extends Mapper<Object, Text, ImmutableBytesWritable, KeyValue> {
 
-        public void map(Text word, StringLineWritable docs_tfs, Context context) throws IOException, InterruptedException
+        public void map(Object word, Text docs_tfs, Context context) throws IOException, InterruptedException
         {
             // String word_id; String doc_id; int tf;
 
-            System.out.println("================XXX " + word.toString());
+            String docs_tfsStr = docs_tfs.toString();
 
-            byte[] word_id_bytes = Bytes.toBytes(word.toString());
+            String word_id = docs_tfsStr.split(WordCountMapper.PATTERN_WHITESPACE)[0];
+            byte[] word_id_bytes = Bytes.toBytes(word_id);
             ImmutableBytesWritable HKey = new ImmutableBytesWritable(word_id_bytes);
 
-            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(docs_tfs.toString().toLowerCase().split(" ")));
-            System.out.println("================XXX " + arrayList);
-            for (String doc_tf : arrayList) {
+            String [] arr = docs_tfsStr.replace(word_id, "").split(",");
+            for (int i = 0; i < arr.length; i++) {
+                arr[i] = arr[i].trim();
+            }
 
+            System.out.println("================XXX " + Arrays.toString(arr));
 
-                String [] tmp = doc_tf.split(":");
+            for (int i = 0; i < arr.length; i++) {
+
+                if(!arr[i].matches("^[0-9]+:[0-9]+$")) {
+                    continue;
+                }
+
+                String [] tmp = arr[i].split(":");
                 String doc_id = tmp[0];
                 String tf = tmp[1];
+                System.out.println("================XXX tuplet: " + doc_id + ":" + tf);
                 byte[] doc_bytes = Bytes.toBytes(doc_id);
                 byte[] tf_bytes = Bytes.toBytes(tf);
                 byte[] col_family = Bytes.toBytes("doc");
