@@ -95,46 +95,13 @@ public class WordCount extends Configured implements Tool
         private final IntWritable ONE = new IntWritable(1);
         private StringLineWritable line = new StringLineWritable();
         private Text word = new Text();
-        private Text WORD_id = new Text();
+        private Text DOC_id = new Text();
         // filter patterns
         private static final String PATTERN_GOOD_WORDS = "[a-z]{3,25}";
         private static final String PATTERN_BAD_PREFIX = "^[^a-z]+";
         private static final String PATTERN_BAD_POSTFIX = "[^a-z]+$";
         private static final String PATTERN_WHITESPACE = "\\s+";
         private String DOC_ID_PATTERN = "[^0-9]+$";
-
-        public static final String DOCUMENT_COUNT_HELPER = "aaamojesuperslovickocece";
-        private HashSet<String> uniqueWords = new HashSet<>();
-        private HashMap<String, Integer> wordIdVocab;
-        private HashMap<String, Integer> termsFrequencyPerDoc;
-        private int N;
-        private double[] idfs;
-
-        protected void setup(Context context) throws IOException, InterruptedException {
-            wordIdVocab = new HashMap<>();
-
-            ArrayList<String> lines = Util.readLines(context.getCacheFiles()[0]);
-            if (lines.isEmpty()) {
-                return;
-            }
-
-            // read number of documents: N
-            String [] firstLine = lines.get(0).split(" ");
-            N = Integer.parseInt(firstLine[1]);
-
-            idfs = new double[lines.size()];
-
-            // skip first line ->> N
-            // radek: slovo  #vyskytu
-            for (int row = 1; row < lines.size(); row++)  {
-                String[] words = lines.get(row).split(PATTERN_WHITESPACE);
-
-                wordIdVocab.put(words[0], row);
-                idfs[row] = Double.parseDouble(words[1]);
-            }
-
-//            System.out.println("=== wordIdVocab.size=" + wordIdVocab.size() + ", N=" + N + ", idfs.len=" + idfs.length);
-        }
 
         /**
          *
@@ -146,47 +113,27 @@ public class WordCount extends Configured implements Tool
          */
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
-            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(" ")));
+            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(PATTERN_WHITESPACE)));
 
-            String docIdStr = arrayList.get(0).replaceFirst(DOC_ID_PATTERN, "");
-            termsFrequencyPerDoc = new HashMap<>();
+            String docIdStr = arrayList.get(0).replace(DOC_ID_PATTERN, "");
+            HashSet<String> uniqueWords = new HashSet<>();
 
             for (String term : arrayList) {
 
-                // procisti slova se spatnym prefixem a/nebo postfixem + zahrne i prvni slova za WORD_id,
+                // procisti slova se spatnym prefixem a/nebo postfixem + zahrne i prvni slova za DOC_id,
                 // ktera jsou od id oddelena tabulatorem a vypadaji takto:  5345    prvniSlovo
                 term = term.replaceFirst(PATTERN_BAD_PREFIX, "").replaceFirst(PATTERN_BAD_POSTFIX, "");
 
                 if (term.matches(PATTERN_GOOD_WORDS)) {
                     // DF_i .. document freq. = num. of documents containing term i
-                    if (uniqueWords.add(term)) { // add() == true, if set did not contains term
-                        word.set(term);
-                        // poprve viden term i, tf_i = 1
-                        termsFrequencyPerDoc.put(term, 1);
-                    } else {
-                        // jiz vlozeno
-                        if(termsFrequencyPerDoc.get(term) != null) {
-                            int tf = termsFrequencyPerDoc.get(term);
-                            termsFrequencyPerDoc.put(term, tf + 1);
-                        }
-                    }
+                    uniqueWords.add(term); // add() == true, if set did not contains term
                 }
             }
 
-            for(Map.Entry<String, Integer> entry : termsFrequencyPerDoc.entrySet()) {
-                String t_i = entry.getKey();
-                int tf_i = entry.getValue();
-                // get term's id
-                int word_id;
-                // potoze ve slovniku nejsou vsechna slova
-                if(wordIdVocab.get(t_i) != null) {
-                    word_id = wordIdVocab.get(t_i);
-
-                    line.set(docIdStr + ":" + tf_i);
-                    WORD_id.set(word_id + "");
-                    context.write(WORD_id, line);
-                }
-            }
+            DOC_id.set(docIdStr);
+            System.out.println("==========XXX docStr=" + docIdStr);
+            line.set(uniqueWords.size() + "");
+            context.write(DOC_id, line);
         }
     }
 
@@ -216,18 +163,9 @@ public class WordCount extends Configured implements Tool
                 job.addCacheFile(file) pro pouziti distribuovane cache na vsech nodech
             */
 
-            boolean first = true;
-            StringBuilder toReturn = new StringBuilder();
             for (StringLineWritable value : values) {
-                if (!first)
-                    toReturn.append(", ");
-                first=false;
-                toReturn.append(value.toString());
+                context.write(text, value);
             }
-
-            StringLineWritable slv = new StringLineWritable();
-            slv.set(toReturn.toString());
-            context.write(text, slv);
         }
     }
 
