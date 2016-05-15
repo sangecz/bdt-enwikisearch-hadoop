@@ -146,9 +146,9 @@ public class WordCount extends Configured implements Tool
          */
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException
         {
-            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(" ")));
+            ArrayList<String> arrayList = new ArrayList<String>(Arrays.asList(value.toString().toLowerCase().split(PATTERN_WHITESPACE)));
 
-            String docIdStr = arrayList.get(0).replaceFirst(DOC_ID_PATTERN, "");
+            String docIdStr = arrayList.get(0).replace(DOC_ID_PATTERN, "");
             termsFrequencyPerDoc = new HashMap<>();
 
             for (String term : arrayList) {
